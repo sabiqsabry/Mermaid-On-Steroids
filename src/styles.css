@@ -52,6 +52,18 @@ button:active {
   transform: translateY(0);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  box-shadow: none;
+  transform: none;
+}
+
+button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .shell {
   max-width: 1500px;
   margin: 0 auto;
@@ -216,6 +228,10 @@ h1 {
 .preview-toolbar button {
   padding: 0.45rem 0.8rem;
   font-size: 0.88rem;
+}
+
+.button-row button:disabled {
+  opacity: 0.5;
 }
 
 .editor-panel {
