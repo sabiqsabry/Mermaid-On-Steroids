@@ -287,6 +287,39 @@ textarea::placeholder {
   height: auto;
 }
 
+.preview-canvas .node,
+.preview-canvas .cluster,
+.preview-canvas .edgePath {
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease,
+    transform 0.2s ease;
+}
+
+.preview-canvas .mos-dimmed {
+  opacity: 0.25;
+}
+
+.preview-canvas .mos-highlight {
+  opacity: 1;
+  filter: drop-shadow(0 0 14px rgba(46, 107, 214, 0.45));
+}
+
+.preview-canvas .mos-highlight path,
+.preview-canvas .mos-highlight rect,
+.preview-canvas .mos-highlight polygon,
+.preview-canvas .mos-highlight circle,
+.preview-canvas .mos-highlight ellipse {
+  stroke-width: 3px;
+}
+
+.preview-canvas .mos-highlight text,
+.preview-canvas .mos-highlight tspan,
+.preview-canvas .mos-highlight .nodeLabel,
+.preview-canvas .mos-highlight .cluster-label {
+  font-weight: 700;
+}
+
 .preview-canvas text,
 .preview-canvas tspan,
 .preview-canvas .nodeLabel,
@@ -324,9 +357,10 @@ textarea::placeholder {
 }
 
 .footer {
-  padding: 20px 4px 4px;
+  padding: 48px 4px 12px;
   color: #765f4c;
   font-size: 0.95rem;
+  text-align: center;
 }
 
 .footer a {

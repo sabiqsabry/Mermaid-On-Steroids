@@ -101,6 +101,10 @@ type PreviewEditorState = {
   x: number;
   y: number;
 };
+type HoverContext = {
+  nodeIds: string[];
+  edgeIds: string[];
+};
 
 const ELK_FRONTMATTER = `---
 config:
@@ -253,6 +257,132 @@ function extractMermaidLabelTarget(element: Element | null) {
   }
 
   return null;
+}
+
+function extractMermaidNodeIdFromElement(element: Element | null) {
+  let current: Element | null = element;
+
+  while (current) {
+    const id = current.getAttribute("id");
+    if (id) {
+      const flowchartNodeMatch = id.match(/^flowchart-([A-Za-z0-9_:.]+)-\d+$/);
+      if (flowchartNodeMatch?.[1]) {
+        return flowchartNodeMatch[1];
+      }
+
+      if (!id.startsWith("L-") && /^[A-Za-z][A-Za-z0-9_:.]*$/.test(id)) {
+        return id;
+      }
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function extractEdgeRelationship(element: Element | null) {
+  let current: Element | null = element;
+
+  while (current) {
+    const id = current.getAttribute("id");
+    if (id) {
+      const edgeMatch = id.match(/^L-([A-Za-z0-9_:.]+)-([A-Za-z0-9_:.]+)-\d+$/);
+      if (edgeMatch?.[1] && edgeMatch?.[2]) {
+        return {
+          edgeId: id,
+          startId: edgeMatch[1],
+          endId: edgeMatch[2],
+        };
+      }
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function findConnectedEdgeIds(container: HTMLElement, nodeId: string) {
+  const connectedEdges = new Set<string>();
+
+  container.querySelectorAll<HTMLElement>("[id^='L-']").forEach((element) => {
+    const id = element.getAttribute("id");
+    if (!id) {
+      return;
+    }
+
+    const edgeMatch = id.match(/^L-([A-Za-z0-9_:.]+)-([A-Za-z0-9_:.]+)-\d+$/);
+    if (!edgeMatch) {
+      return;
+    }
+
+    if (edgeMatch[1] === nodeId || edgeMatch[2] === nodeId) {
+      connectedEdges.add(id);
+    }
+  });
+
+  return [...connectedEdges];
+}
+
+function clearHoverClasses(container: HTMLElement) {
+  container
+    .querySelectorAll(".mos-highlight, .mos-dimmed")
+    .forEach((element) => {
+      element.classList.remove("mos-highlight", "mos-dimmed");
+    });
+}
+
+function applyHoverContext(container: HTMLElement, context: HoverContext | null) {
+  clearHoverClasses(container);
+
+  const interactiveElements = container.querySelectorAll<HTMLElement>(
+    ".node, .cluster, .edgePath"
+  );
+
+  if (!context) {
+    return;
+  }
+
+  interactiveElements.forEach((element) => {
+    element.classList.add("mos-dimmed");
+  });
+
+  const highlightSelectors = [
+    ...context.nodeIds.flatMap((id) => [`[id='${id}']`, `[id^='flowchart-${id}-']`]),
+    ...context.edgeIds.map((id) => `[id='${id}']`),
+  ];
+
+  if (!highlightSelectors.length) {
+    return;
+  }
+
+  container
+    .querySelectorAll<HTMLElement>(highlightSelectors.join(", "))
+    .forEach((element) => {
+      element.classList.remove("mos-dimmed");
+      element.classList.add("mos-highlight");
+    });
+}
+
+function resolveHoverContext(container: HTMLElement, element: Element | null) {
+  const edgeRelationship = extractEdgeRelationship(element);
+  if (edgeRelationship) {
+    return {
+      nodeIds: [edgeRelationship.startId, edgeRelationship.endId],
+      edgeIds: [edgeRelationship.edgeId],
+    };
+  }
+
+  const nodeId = extractMermaidNodeIdFromElement(element);
+  if (!nodeId) {
+    return null;
+  }
+
+  return {
+    nodeIds: [nodeId],
+    edgeIds: findConnectedEdgeIds(container, nodeId),
+  };
 }
 
 function updateMermaidLabelById(source: string, id: string, nextLabel: string) {
@@ -693,6 +823,24 @@ export default function App() {
     });
   }
 
+  function handlePreviewHover(event: React.MouseEvent<HTMLDivElement>) {
+    if (!previewRef.current) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const context = resolveHoverContext(previewRef.current, target);
+    applyHoverContext(previewRef.current, context);
+  }
+
+  function handlePreviewLeave() {
+    if (!previewRef.current) {
+      return;
+    }
+
+    clearHoverClasses(previewRef.current);
+  }
+
   return (
     <div className="shell">
       <div className="announcement-bar">
@@ -786,6 +934,8 @@ export default function App() {
                 ref={previewRef}
                 className="preview-canvas"
                 onClick={handlePreviewClick}
+                onMouseMove={handlePreviewHover}
+                onMouseLeave={handlePreviewLeave}
               />
               {!renderedSvg ? (
                 <div className="preview-empty-state">
