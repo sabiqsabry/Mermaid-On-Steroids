@@ -3,6 +3,7 @@ import mermaid from "mermaid";
 import elkLayouts from "@mermaid-js/layout-elk";
 import { jsPDF } from "jspdf";
 import "svg2pdf.js";
+import { parseMermaidToExcalidraw } from "@excalidraw/mermaid-to-excalidraw";
 import type { BinaryFiles } from "@excalidraw/excalidraw/types";
 
 const SAMPLE_CODE = `flowchart TD
@@ -90,7 +91,8 @@ type ExportFormat =
   | "svg"
   | "png"
   | "pdf"
-  | "excalidraw-handoff";
+  | "excalidraw-handoff"
+  | "excalidraw-editable-elk";
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
 type PreviewEditorState = {
@@ -487,6 +489,30 @@ export default function App() {
     );
   }
 
+  async function exportEditableElkExcalidrawScene() {
+    const { convertToExcalidrawElements, serializeAsJSON } =
+      await loadExcalidrawModule();
+    const { elements, files } = await parseMermaidToExcalidraw(codeWithLayout, {
+      themeVariables: {
+        fontSize: "18px",
+      },
+    });
+
+    const editableElements = convertToExcalidrawElements(elements, {
+      regenerateIds: false,
+    });
+
+    return serializeAsJSON(
+      editableElements,
+      {
+        name: `${baseName}-editable-elk.excalidraw`,
+        viewBackgroundColor: "#ffffff",
+      },
+      files ?? {},
+      "local"
+    );
+  }
+
   async function handleExport(format: ExportFormat) {
     if (!renderedSvg) {
       setError("Render a diagram first.");
@@ -543,6 +569,18 @@ export default function App() {
           `${baseName}-excalidraw-handoff.excalidraw`
         );
         setStatus("Exported an Excalidraw handoff that preserves the ELK render.");
+        return;
+      }
+
+      if (format === "excalidraw-editable-elk") {
+        const scene = await exportEditableElkExcalidrawScene();
+        downloadBlob(
+          new Blob([scene], { type: "application/json;charset=utf-8" }),
+          `${baseName}-excalidraw-editable-elk.excalidraw`
+        );
+        setStatus(
+          "Exported an editable Excalidraw scene using the ELK-positioned graph."
+        );
         return;
       }
     } catch (cause) {
@@ -696,11 +734,16 @@ export default function App() {
             <button onClick={() => handleExport("excalidraw-handoff")}>
               Excalidraw handoff
             </button>
+            <button onClick={() => handleExport("excalidraw-editable-elk")}>
+              Excalidraw editable ELK
+            </button>
           </div>
           <p className="hint">
             Click a node or subgraph label in the preview to edit it inline and
             push the change back into the Mermaid code. `Excalidraw handoff`
-            preserves the exact ELK render as an embedded scene.
+            preserves the exact ELK render as an embedded scene, while
+            `Excalidraw editable ELK` exports native editable elements using the
+            ELK-positioned graph as a V2 beta.
           </p>
         </div>
       </header>
