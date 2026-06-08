@@ -494,6 +494,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
 export default function App() {
   const [code, setCode] = useState("");
   const [useElk, setUseElk] = useState(true);
+  const [hoverGlowEnabled, setHoverGlowEnabled] = useState(false);
   const [baseName, setBaseName] = useState("diagram");
   const [previewZoom, setPreviewZoom] = useState(1);
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
@@ -572,6 +573,12 @@ export default function App() {
       previewInputRef.current.select();
     }
   }, [previewEditor]);
+
+  useEffect(() => {
+    if (!hoverGlowEnabled && previewRef.current) {
+      clearHoverClasses(previewRef.current);
+    }
+  }, [hoverGlowEnabled]);
 
   async function exportFaithfulExcalidrawScene() {
     const { convertToExcalidrawElements, serializeAsJSON } =
@@ -824,7 +831,7 @@ export default function App() {
   }
 
   function handlePreviewHover(event: React.MouseEvent<HTMLDivElement>) {
-    if (!previewRef.current) {
+    if (!hoverGlowEnabled || !previewRef.current) {
       return;
     }
 
@@ -872,6 +879,14 @@ export default function App() {
               onChange={(event) => setUseElk(event.target.checked)}
             />
             <span>Use ELK layout</span>
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={hoverGlowEnabled}
+              onChange={(event) => setHoverGlowEnabled(event.target.checked)}
+            />
+            <span>Enable hover glow beta</span>
           </label>
           <div className="button-row">
             <button onClick={resetToSample}>Reset</button>
@@ -929,6 +944,7 @@ export default function App() {
             <div
               className="preview-stage"
               style={{ transform: `scale(${previewZoom})` }}
+              data-hover-glow={hoverGlowEnabled ? "enabled" : "disabled"}
             >
               <div
                 ref={previewRef}
