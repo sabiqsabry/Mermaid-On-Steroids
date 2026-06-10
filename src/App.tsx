@@ -143,29 +143,16 @@ function downloadBlob(blob: Blob, filename: string) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.rel = "noreferrer";
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function openBlobInNewTab(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-
-  if (!opened) {
-    return false;
-  }
-
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  return true;
 }
 
 function svgToBlob(svgMarkup: string) {
   return new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
-}
-
-function svgMarkupToDataUrl(svgMarkup: string) {
-  const encoded = btoa(unescape(encodeURIComponent(svgMarkup)));
-  return `data:image/svg+xml;base64,${encoded}`;
 }
 
 function getOptimalRasterScale(width: number, height: number) {
@@ -440,13 +427,21 @@ async function renderSvgMarkupToCanvas(
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
+  const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(svgBlob);
+
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
-    img.onload = () => resolve(img);
-    img.onerror = () =>
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
       reject(new Error("Failed to load SVG for high-resolution export."));
-    img.src = svgMarkupToDataUrl(svgMarkup);
+    };
+    img.src = objectUrl;
   });
 
   ctx.drawImage(image, 0, 0, width, height);
@@ -605,13 +600,8 @@ export default function App() {
           height,
         });
         const pdfBlob = pdf.output("blob");
-        const opened = openBlobInNewTab(pdfBlob);
-        if (!opened) {
-          downloadBlob(pdfBlob, `${baseName}.pdf`);
-          setStatus("Exported a high-quality single-page PDF download.");
-          return;
-        }
-        setStatus("Opened a high-quality single-page PDF in a new tab.");
+        downloadBlob(pdfBlob, `${baseName}.pdf`);
+        setStatus("Exported a high-quality single-page PDF download.");
         return;
       }
     } catch (cause) {
