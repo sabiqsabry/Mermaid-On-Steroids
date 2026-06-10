@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import mermaid from "mermaid";
 import elkLayouts from "@mermaid-js/layout-elk";
 import { jsPDF } from "jspdf";
-import "svg2pdf.js";
 
 const SAMPLE_CODE = `flowchart TD
   %% ---------- Enterprise Client ----------
@@ -448,18 +447,6 @@ async function renderSvgMarkupToCanvas(
   return canvas;
 }
 
-function createSvgElement(svgMarkup: string) {
-  const temp = document.createElement("div");
-  temp.innerHTML = svgMarkup;
-  const svgElement = temp.querySelector("svg");
-
-  if (!svgElement) {
-    throw new Error("Failed to prepare SVG for PDF export.");
-  }
-
-  return svgElement as SVGSVGElement;
-}
-
 async function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob(resolve, type);
@@ -592,13 +579,9 @@ export default function App() {
           unit: "pt",
           format: [width, height],
         });
-        const svgElement = createSvgElement(svgMarkup);
-        await pdf.svg(svgElement, {
-          x: 0,
-          y: 0,
-          width,
-          height,
-        });
+        const canvas = await renderSvgMarkupToCanvas(svgMarkup, width, height);
+        const pngDataUrl = canvas.toDataURL("image/png");
+        pdf.addImage(pngDataUrl, "PNG", 0, 0, width, height);
         const pdfBlob = pdf.output("blob");
         downloadBlob(pdfBlob, `${baseName}.pdf`);
         setStatus("Exported a high-quality single-page PDF download.");
