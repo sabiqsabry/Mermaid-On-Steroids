@@ -449,15 +449,15 @@ async function renderSvgMarkupToCanvas(
 }
 
 function createSvgElement(svgMarkup: string) {
-  const parser = new DOMParser();
-  const svgDocument = parser.parseFromString(svgMarkup, "image/svg+xml");
-  const svgElement = svgDocument.documentElement as unknown as SVGSVGElement;
+  const temp = document.createElement("div");
+  temp.innerHTML = svgMarkup;
+  const svgElement = temp.querySelector("svg");
 
-  if (!svgElement || svgElement.nodeName.toLowerCase() !== "svg") {
+  if (!svgElement) {
     throw new Error("Failed to prepare SVG for PDF export.");
   }
 
-  return svgElement;
+  return svgElement as SVGSVGElement;
 }
 
 async function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
