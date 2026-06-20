@@ -9,7 +9,21 @@ import {
   withLayout,
   updateMermaidLabelById,
   updateMermaidLabelByText,
+  parseEdgeEndpoints,
 } from "./mermaid-utils";
+import {
+  IconReset,
+  IconSample,
+  IconCopy,
+  IconLayout,
+  IconGlow,
+  IconSvg,
+  IconPng,
+  IconPdf,
+  IconShapes,
+  IconFullscreen,
+  IconFullscreenExit,
+} from "./icons";
 
 const SAMPLE_CODE = `flowchart TD
   %% ---------- Enterprise Client ----------
@@ -280,7 +294,7 @@ function applyHoverContext(container: HTMLElement, context: HoverContext | null)
   clearHoverClasses(container);
 
   const interactiveElements = container.querySelectorAll<HTMLElement>(
-    ".node, .cluster, path.flowchart-link"
+    ".node, .cluster, path.flowchart-link, g.edgeLabel"
   );
 
   if (!context) {
@@ -327,10 +341,19 @@ function resolveHoverContext(container: HTMLElement, element: Element | null) {
     return null;
   }
 
-  return {
-    nodeIds: [nodeId],
-    edgeIds: findConnectedEdgeIds(container, nodeId),
-  };
+  // Light up the hovered node, its edges, and the neighbours on the far end of
+  // those edges so the local flow reads as one connected group.
+  const edgeIds = findConnectedEdgeIds(container, nodeId);
+  const nodeIds = new Set<string>([nodeId]);
+  edgeIds.forEach((edgeId) => {
+    const endpoints = parseEdgeEndpoints(edgeId);
+    if (endpoints) {
+      nodeIds.add(endpoints.start);
+      nodeIds.add(endpoints.end);
+    }
+  });
+
+  return { nodeIds: [...nodeIds], edgeIds };
 }
 
 function findMermaidLabelText(element: Element | null) {
@@ -395,6 +418,37 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
   return blob;
 }
 
+type DockButtonProps = {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  active?: boolean;
+  disabled?: boolean;
+};
+
+// Icon-only dock button with an accessible label and a hover/focus tooltip.
+function DockButton({
+  label,
+  onClick,
+  children,
+  active = false,
+  disabled = false,
+}: DockButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`dock-btn${active ? " is-active" : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active}
+      data-tooltip={label}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function App() {
   const [code, setCode] = useState("");
   const [useElk, setUseElk] = useState(true);
@@ -412,6 +466,9 @@ export default function App() {
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
   const previewPanelRef = useRef<HTMLElement | null>(null);
   const previewInputRef = useRef<HTMLInputElement | null>(null);
+  // Avoids recomputing the hover highlight on every mouse move while the cursor
+  // stays within the same node or edge.
+  const lastHoverKeyRef = useRef<string | null>(null);
 
   const codeWithLayout = useMemo(() => withLayout(code, useElk), [code, useElk]);
 
@@ -706,11 +763,21 @@ export default function App() {
     }
 
     const target = event.target as HTMLElement | null;
+    const key =
+      extractEdgeRelationship(target)?.edgeId ??
+      extractMermaidNodeIdFromElement(target) ??
+      "";
+    if (key === lastHoverKeyRef.current) {
+      return;
+    }
+    lastHoverKeyRef.current = key;
+
     const context = resolveHoverContext(previewRef.current, target);
     applyHoverContext(previewRef.current, context);
   }
 
   function handlePreviewLeave() {
+    lastHoverKeyRef.current = null;
     if (!previewRef.current) {
       return;
     }
@@ -720,63 +787,19 @@ export default function App() {
 
   return (
     <div className="shell">
-      <div className="announcement-bar">
-        Mermaid on Steroids is just getting started. More layout tools, export
-        controls, and editing options are coming soon.
-      </div>
-      <header className="hero">
-        <div>
+      <header className="topbar">
+        <div className="brand">
           <p className="eyebrow">Mermaid by Sabiq</p>
           <h1>Mermaid on Steroids</h1>
-          <p className="lede">
-            Mermaid with ELK-first rendering, cleaner exports, and room to keep
-            evolving the editable diagram workflow.
-          </p>
         </div>
-        <div className="hero-actions">
-          <label className="filename-field">
-            <span>Export name</span>
-            <input
-              value={baseName}
-              onChange={(event) => setBaseName(event.target.value || "diagram")}
-              aria-label="Export base name"
-            />
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={useElk}
-              onChange={(event) => setUseElk(event.target.checked)}
-            />
-            <span>Use ELK layout</span>
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={hoverGlowEnabled}
-              onChange={(event) => setHoverGlowEnabled(event.target.checked)}
-            />
-            <span>Enable hover glow beta</span>
-          </label>
-          <div className="button-row">
-            <button onClick={resetWorkspace}>Reset</button>
-            <button onClick={loadSample}>Load sample</button>
-            <button onClick={copyMermaid}>Copy Mermaid</button>
-            <button onClick={() => handleExport("svg")}>SVG</button>
-            <button onClick={() => handleExport("png")}>PNG</button>
-            <button onClick={() => handleExport("pdf")}>PDF</button>
-            <button onClick={() => handleExport("excalidraw-editable-elk")}>
-              Excalidraw editable ELK
-            </button>
-          </div>
-          <p className="hint">
-            Click a node or subgraph label in the preview to edit it inline and
-            push the change back into the Mermaid code. `Excalidraw editable
-            ELK` exports native, editable Excalidraw shapes and arrows from the
-            ELK-positioned graph — open the file at excalidraw.com to keep
-            editing.
-          </p>
-        </div>
+        <label className="export-name">
+          <span>Export name</span>
+          <input
+            value={baseName}
+            onChange={(event) => setBaseName(event.target.value || "diagram")}
+            aria-label="Export base name"
+          />
+        </label>
       </header>
 
       <main className="workspace">
@@ -799,12 +822,30 @@ export default function App() {
           <div className="panel-header">
             <h2>Preview</h2>
             <div className="preview-toolbar">
-              <span>{useElk ? "ELK" : "Default"} render</span>
-              <button onClick={zoomOut}>-</button>
-              <button onClick={resetZoom}>{Math.round(previewZoom * 100)}%</button>
-              <button onClick={zoomIn}>+</button>
-              <button onClick={togglePreviewFullscreen}>
-                {isPreviewFullscreen ? "Exit full screen" : "Full screen"}
+              <span className="render-chip">{useElk ? "ELK" : "Default"}</span>
+              <div className="zoom-control" role="group" aria-label="Zoom">
+                <button onClick={zoomOut} aria-label="Zoom out">
+                  −
+                </button>
+                <button onClick={resetZoom} aria-label="Reset zoom">
+                  {Math.round(previewZoom * 100)}%
+                </button>
+                <button onClick={zoomIn} aria-label="Zoom in">
+                  +
+                </button>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={togglePreviewFullscreen}
+                aria-label={
+                  isPreviewFullscreen ? "Exit full screen" : "Full screen"
+                }
+                data-tooltip={
+                  isPreviewFullscreen ? "Exit full screen" : "Full screen"
+                }
+              >
+                {isPreviewFullscreen ? <IconFullscreenExit /> : <IconFullscreen />}
               </button>
             </div>
           </div>
@@ -857,6 +898,59 @@ export default function App() {
             ) : null}
           </div>
         </section>
+
+        <aside className="dock" aria-label="Tools">
+          <div className="dock-group">
+            <DockButton label="Reset workspace" onClick={resetWorkspace}>
+              <IconReset />
+            </DockButton>
+            <DockButton label="Load sample" onClick={loadSample}>
+              <IconSample />
+            </DockButton>
+            <DockButton label="Copy Mermaid" onClick={copyMermaid}>
+              <IconCopy />
+            </DockButton>
+          </div>
+
+          <div className="dock-divider" />
+
+          <div className="dock-group">
+            <DockButton
+              label={`ELK layout: ${useElk ? "on" : "off"}`}
+              active={useElk}
+              onClick={() => setUseElk((value) => !value)}
+            >
+              <IconLayout />
+            </DockButton>
+            <DockButton
+              label={`Hover glow: ${hoverGlowEnabled ? "on" : "off"} (beta)`}
+              active={hoverGlowEnabled}
+              onClick={() => setHoverGlowEnabled((value) => !value)}
+            >
+              <IconGlow />
+            </DockButton>
+          </div>
+
+          <div className="dock-divider" />
+
+          <div className="dock-group">
+            <DockButton label="Export SVG" onClick={() => handleExport("svg")}>
+              <IconSvg />
+            </DockButton>
+            <DockButton label="Export PNG" onClick={() => handleExport("png")}>
+              <IconPng />
+            </DockButton>
+            <DockButton label="Export PDF" onClick={() => handleExport("pdf")}>
+              <IconPdf />
+            </DockButton>
+            <DockButton
+              label="Export editable Excalidraw (ELK)"
+              onClick={() => handleExport("excalidraw-editable-elk")}
+            >
+              <IconShapes />
+            </DockButton>
+          </div>
+        </aside>
       </main>
       <footer className="footer">
         Developed by{" "}

@@ -1,12 +1,27 @@
 :root {
   color-scheme: light;
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --hover-surface: rgba(0, 0, 0, 0.05);
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 9px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.06);
+
   font-family:
-    "Atkinson Hyperlegible", "Inter", "Segoe UI", sans-serif;
-  background:
-    radial-gradient(circle at top left, #f8efe2 0%, transparent 34%),
-    radial-gradient(circle at top right, #dbe9ff 0%, transparent 28%),
-    linear-gradient(180deg, #fffdf8 0%, #f6f2ea 100%);
-  color: #1d1a16;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI",
+    "Atkinson Hyperlegible", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -30,169 +45,100 @@ input {
   font: inherit;
 }
 
+/* Reset: every button in the app is styled by its own class below. */
 button {
-  border: 1px solid rgba(62, 48, 34, 0.18);
-  background: #1f1a17;
-  color: #fff8ef;
-  border-radius: 999px;
-  padding: 0.7rem 1rem;
+  border: none;
+  background: none;
+  color: inherit;
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    opacity 0.15s ease;
-}
-
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(30, 22, 14, 0.14);
-}
-
-button:active {
-  transform: translateY(0);
+  padding: 0;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.56;
-  box-shadow: none;
-  transform: none;
-}
-
-button:disabled:hover {
-  transform: none;
-  box-shadow: none;
 }
 
 .shell {
   max-width: 1500px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 30px 32px 8px;
 }
 
-.announcement-bar {
-  margin-bottom: 18px;
-  padding: 14px 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(62, 48, 34, 0.12);
-  background: linear-gradient(90deg, rgba(245, 230, 208, 0.9), rgba(219, 233, 255, 0.9));
-  color: #5b4532;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.hero {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 24px;
-  align-items: end;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
+  margin: 0 0 6px;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.78rem;
-  color: #7a5f46;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 4rem);
-  line-height: 0.95;
-  max-width: 15ch;
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
-.lede {
-  margin: 18px 0 0;
-  max-width: 65ch;
-  color: #58493d;
-  font-size: 1.05rem;
-  line-height: 1.6;
-}
-
-.hero-actions {
+.export-name {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  align-items: flex-end;
+  gap: 6px;
+  min-width: 220px;
 }
 
-.filename-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 240px;
-  color: #6f5742;
-  font-size: 0.9rem;
-}
-
-.filename-field span {
+.export-name span {
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
-}
-
-.filename-field input {
-  border: 1px solid rgba(62, 48, 34, 0.14);
-  border-radius: 14px;
-  padding: 0.85rem 0.95rem;
-  background: rgba(255, 255, 255, 0.76);
-  color: #201913;
-  outline: none;
-}
-
-.filename-field input:focus {
-  border-color: rgba(64, 101, 180, 0.5);
-  box-shadow: 0 0 0 4px rgba(64, 101, 180, 0.12);
-}
-
-.toggle {
-  display: inline-flex;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(62, 48, 34, 0.12);
-  backdrop-filter: blur(10px);
-}
-
-.toggle input {
-  accent-color: #1f1a17;
-}
-
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.hint {
-  margin: 0;
-  max-width: 48ch;
-  color: #765f4c;
-  line-height: 1.5;
+  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
   text-align: right;
-  font-size: 0.92rem;
 }
 
+.export-name input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.export-name input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.18);
+}
+
+/* ---------- Workspace ---------- */
 .workspace {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
   gap: 18px;
-  min-height: 72vh;
+  min-height: 74vh;
+  align-items: start;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(62, 48, 34, 0.12);
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(40, 26, 14, 0.08);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
   overflow: hidden;
+  height: 74vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-header {
@@ -200,78 +146,109 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(62, 48, 34, 0.1);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .panel-header h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #5d4a39;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
-.panel-header span {
-  color: #8a6f57;
-  font-size: 0.9rem;
+.panel-header > span {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
 }
 
+/* ---------- Preview toolbar ---------- */
 .preview-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 10px;
 }
 
-.preview-toolbar button {
-  padding: 0.45rem 0.8rem;
-  font-size: 0.88rem;
+.render-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--hover-surface);
+  padding: 4px 9px;
+  border-radius: 999px;
 }
 
-.button-row button:disabled {
-  opacity: 0.5;
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--hover-surface);
+  border-radius: var(--radius-sm);
+  padding: 2px;
 }
 
-.editor-panel {
-  display: flex;
-  flex-direction: column;
+.zoom-control button {
+  border-radius: 7px;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  min-width: 30px;
+  transition: background 0.15s ease;
 }
 
-textarea {
+.zoom-control button:hover {
+  background: var(--surface);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--hover-surface);
+}
+
+/* ---------- Editor ---------- */
+.editor-panel textarea {
   flex: 1;
   width: 100%;
-  min-height: 620px;
   border: 0;
   outline: none;
-  resize: vertical;
-  padding: 18px 20px 22px;
+  resize: none;
+  padding: 16px 20px 20px;
   background: transparent;
-  color: #171311;
+  color: var(--text);
   line-height: 1.6;
   tab-size: 2;
-  font-size: 0.94rem;
+  font-size: 0.9rem;
+  font-family: "SF Mono", "JetBrains Mono", ui-monospace, "Menlo", monospace;
 }
 
 textarea::placeholder {
-  color: rgba(82, 68, 56, 0.45);
+  color: rgba(60, 60, 67, 0.3);
 }
 
-.preview-panel {
-  display: flex;
-  flex-direction: column;
-}
-
+/* ---------- Preview ---------- */
 .preview-frame {
   flex: 1;
   padding: 18px;
   overflow: auto;
   position: relative;
-  background:
-    linear-gradient(rgba(80, 64, 47, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(80, 64, 47, 0.03) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image:
+    radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 
 .preview-stage {
@@ -282,10 +259,10 @@ textarea::placeholder {
 }
 
 .preview-canvas {
-  min-height: 620px;
+  min-height: 540px;
   display: grid;
   place-items: center;
-  border-radius: 18px;
+  border-radius: var(--radius-md);
   padding: 18px;
 }
 
@@ -293,9 +270,8 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   min-height: 420px;
-  color: #8a6f57;
-  font-size: 1rem;
-  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+  font-size: 0.95rem;
 }
 
 .preview-canvas svg {
@@ -305,20 +281,18 @@ textarea::placeholder {
 
 .preview-canvas .node,
 .preview-canvas .cluster,
-.preview-canvas .edgePath {
-  transition:
-    opacity 0.2s ease,
-    filter 0.2s ease,
-    transform 0.2s ease;
+.preview-canvas path.flowchart-link,
+.preview-canvas g.edgeLabel {
+  transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
 .preview-canvas .mos-dimmed {
-  opacity: 0.25;
+  opacity: 0.18;
 }
 
 .preview-canvas .mos-highlight {
   opacity: 1;
-  filter: drop-shadow(0 0 14px rgba(46, 107, 214, 0.45));
+  filter: drop-shadow(0 0 12px rgba(0, 113, 227, 0.4));
 }
 
 .preview-canvas .mos-highlight path,
@@ -326,7 +300,7 @@ textarea::placeholder {
 .preview-canvas .mos-highlight polygon,
 .preview-canvas .mos-highlight circle,
 .preview-canvas .mos-highlight ellipse {
-  stroke-width: 3px;
+  stroke-width: 2.6px;
 }
 
 .preview-canvas .mos-highlight text,
@@ -351,57 +325,194 @@ textarea::placeholder {
 .preview-editor input {
   min-width: 240px;
   max-width: 420px;
-  border: 1px solid rgba(46, 107, 214, 0.28);
-  border-radius: 12px;
-  padding: 0.7rem 0.85rem;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 36px rgba(31, 26, 23, 0.16);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
   outline: none;
 }
 
 .preview-editor input:focus {
-  border-color: rgba(46, 107, 214, 0.6);
   box-shadow:
-    0 18px 36px rgba(31, 26, 23, 0.16),
-    0 0 0 4px rgba(46, 107, 214, 0.12);
+    0 12px 30px rgba(0, 0, 0, 0.18),
+    0 0 0 3px rgba(0, 113, 227, 0.18);
 }
 
 .error {
   margin: 0;
-  padding: 0 20px 18px;
-  color: #b42318;
+  padding: 12px 20px 16px;
+  color: #d70015;
+  font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
+/* ---------- Tool dock ---------- */
+.dock {
+  position: sticky;
+  top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.dock-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dock-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.dock-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  position: relative;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.dock-btn:hover {
+  background: var(--hover-surface);
+}
+
+.dock-btn:active {
+  transform: scale(0.94);
+}
+
+.dock-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.dock-btn.is-active:hover {
+  background: var(--accent-hover);
+}
+
+.dock-btn:disabled {
+  opacity: 0.4;
+}
+
+.dock-btn:focus-visible,
+.icon-btn:focus-visible,
+.zoom-control button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.4);
+}
+
+/* ---------- Tooltips ---------- */
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(29, 29, 31, 0.92);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.96);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 50;
+}
+
+/* Dock tooltips sit to the left of the rail. */
+.dock-btn[data-tooltip]::after {
+  top: 50%;
+  right: calc(100% + 10px);
+  transform-origin: right center;
+}
+
+.dock-btn[data-tooltip]:hover::after,
+.dock-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* Toolbar icon tooltips sit below the button. */
+.icon-btn[data-tooltip]::after {
+  top: calc(100% + 8px);
+  right: 0;
+  transform: translateY(0) scale(0.96);
+}
+
+.icon-btn[data-tooltip]:hover::after,
+.icon-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ---------- Footer ---------- */
 .footer {
-  padding: 48px 4px 12px;
-  color: #765f4c;
-  font-size: 0.95rem;
+  padding: 28px 4px 18px;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
   text-align: center;
 }
 
 .footer a {
-  color: #1f1a17;
+  color: var(--text-secondary);
+  text-decoration: none;
 }
 
-@media (max-width: 1100px) {
-  .hero,
+.footer a:hover {
+  color: var(--accent);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1080px) {
   .workspace {
     grid-template-columns: 1fr;
   }
 
-  .hero-actions {
-    align-items: flex-start;
+  .panel {
+    height: auto;
+    min-height: 60vh;
   }
 
-  .button-row {
-    justify-content: flex-start;
+  .dock {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
   }
 
-  .hint {
-    text-align: left;
+  .dock-group {
+    flex-direction: row;
   }
 
-  .preview-toolbar {
-    justify-content: flex-start;
+  .dock-divider {
+    width: 1px;
+    height: 28px;
+    margin: 0 4px;
+  }
+
+  /* On small screens place dock tooltips below to avoid running off-screen. */
+  .dock-btn[data-tooltip]::after {
+    top: calc(100% + 8px);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) scale(0.96);
+  }
+
+  .dock-btn[data-tooltip]:hover::after,
+  .dock-btn[data-tooltip]:focus-visible::after {
+    transform: translateX(-50%) scale(1);
   }
 }
