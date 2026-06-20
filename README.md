@@ -67,6 +67,18 @@ The broader approach this repo is exploring:
 4. Build a stronger Mermaid-to-Excalidraw translation layer
 5. Eventually support re-layout or ELK-aware editing workflows inside Excalidraw-style environments
 
+## Development
+
+```bash
+npm install
+npm run dev      # start the dev server (it redirects / to the app)
+npm test         # run the pure-logic unit tests (node:test, no extra deps)
+npm run build    # type-check and build for production
+npm run preview  # serve the production build
+```
+
+The app is served under `/tools/mermaid-on-steroids/`; both `npm run dev` and `npm run preview` redirect the root path there.
+
 ## Stack
 
 - React

@@ -3,6 +3,13 @@ import mermaid from "mermaid";
 import elkLayouts from "@mermaid-js/layout-elk";
 import { jsPDF } from "jspdf";
 import { buildExcalidrawSkeletons } from "./excalidrawExport";
+import {
+  NODE_ID_RE,
+  EDGE_ID_RE,
+  withLayout,
+  updateMermaidLabelById,
+  updateMermaidLabelByText,
+} from "./mermaid-utils";
 
 const SAMPLE_CODE = `flowchart TD
   %% ---------- Enterprise Client ----------
@@ -107,11 +114,6 @@ type HoverContext = {
   edgeIds: string[];
 };
 
-const ELK_FRONTMATTER = `---
-config:
-  layout: elk
----`;
-
 let mermaidReady: Promise<void> | null = null;
 let excalidrawModuleReady: Promise<ExcalidrawModule> | null = null;
 
@@ -143,14 +145,6 @@ async function ensureMermaidReady() {
   }
 
   await mermaidReady;
-}
-
-function withLayout(code: string, useElk: boolean) {
-  if (!code.trim()) return "";
-  if (!useElk) return code;
-  const trimmed = code.trimStart();
-  if (trimmed.startsWith("---")) return code;
-  return `${ELK_FRONTMATTER}\n${code}`;
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -218,17 +212,6 @@ function getPreparedSvgMarkup(svgMarkup: string) {
     height,
   };
 }
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// Mermaid 11 prefixes DOM ids with the render id and uses underscores for edges:
-//   nodes:  "mermaid-<uuid>-flowchart-ZT-9"
-//   edges:  "mermaid-<uuid>-L_CA_REST_0_0"
-// so these patterns are matched anywhere in the id rather than anchored.
-const NODE_ID_RE = /flowchart-(.+)-\d+$/;
-const EDGE_ID_RE = /L_([A-Za-z0-9.:]+)_([A-Za-z0-9.:]+)_\d+_\d+$/;
 
 function extractMermaidNodeIdFromElement(element: Element | null) {
   let current: Element | null = element;
@@ -348,55 +331,6 @@ function resolveHoverContext(container: HTMLElement, element: Element | null) {
     nodeIds: [nodeId],
     edgeIds: findConnectedEdgeIds(container, nodeId),
   };
-}
-
-function updateMermaidLabelById(source: string, id: string, nextLabel: string) {
-  const escapedId = escapeRegExp(id);
-  const lines = source.split("\n");
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    const nodePattern = new RegExp(`^\\s*${escapedId}\\s*[\\[(]`);
-    const subgraphPattern = new RegExp(`^\\s*subgraph\\s+${escapedId}\\s*[\\[(]`);
-
-    if (!nodePattern.test(line) && !subgraphPattern.test(line)) {
-      continue;
-    }
-
-    if (!/"[^"]*"/.test(line)) {
-      continue;
-    }
-
-    lines[index] = line.replace(/"[^"]*"/, `"${nextLabel.replace(/"/g, '\\"')}"`);
-    return lines.join("\n");
-  }
-
-  return source;
-}
-
-// Fallback for subgraph labels: the cluster DOM id is not the Mermaid id in
-// Mermaid 11, so locate the source line by its current quoted label text.
-function updateMermaidLabelByText(
-  source: string,
-  matchText: string,
-  nextLabel: string
-) {
-  const quoted = `"${matchText}"`;
-  const lines = source.split("\n");
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (!line.includes(quoted)) {
-      continue;
-    }
-    lines[index] = line.replace(
-      quoted,
-      `"${nextLabel.replace(/"/g, '\\"')}"`
-    );
-    return lines.join("\n");
-  }
-
-  return source;
 }
 
 function findMermaidLabelText(element: Element | null) {
@@ -556,10 +490,18 @@ export default function App() {
       throw new Error("Render the diagram before exporting to Excalidraw.");
     }
 
+    // The converter only understands flowchart geometry. Mermaid tags the SVG
+    // with the diagram type, so reject other types with a clear message.
+    if (!liveSvg.classList.contains("flowchart")) {
+      throw new Error(
+        "Editable Excalidraw export currently supports flowchart diagrams only. SVG, PNG, and PDF work for every diagram type."
+      );
+    }
+
     const skeletons = buildExcalidrawSkeletons(liveSvg as SVGSVGElement);
     if (!skeletons.length) {
       throw new Error(
-        "No editable shapes were found. Excalidraw export currently supports flowchart diagrams."
+        "No editable shapes were found in this diagram. Excalidraw export supports flowchart diagrams."
       );
     }
 
