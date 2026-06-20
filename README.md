@@ -1,11 +1,14 @@
 # Mermaid on Steroids
 
-Mermaid on Steroids is a local-first Mermaid workspace focused on one practical goal:
+Mermaid on Steroids is a local-first Mermaid workspace with a clean, Apple-inspired
+interface focused on one practical goal:
 
 - take Mermaid code
 - render it with ELK for cleaner layout
 - export it at high quality
 - explore a path toward editable Excalidraw output without losing structure
+
+Everything runs in the browser — there is no backend and nothing leaves your machine.
 
 ## Why this exists
 
@@ -24,12 +27,36 @@ This project is an attempt to bridge that gap.
 The core tool:
 
 - Mermaid editor with live preview
-- ELK layout toggle
+- ELK layout toggle for cleaner graphs
 - a one-click sample diagram to start from
 - inline preview label editing (nodes and subgraphs) that writes back to the Mermaid code
-- interactive preview hover highlighting that focuses a node or edge and its connections
+- interactive hover highlighting that focuses a node or edge, its connected edges, and the neighbouring nodes
 - high-quality SVG, PNG, and PDF export
 - native, editable Excalidraw export from the ELK-positioned graph
+- light and dark themes
+- plain-language error messages when the input is not valid Mermaid yet
+
+## Interface
+
+The workspace is a three-pane layout: the Mermaid editor on the left, the live
+preview in the middle, and a vertical icon **dock** on the right (in the style
+of a design-tool tool rail). Every dock button is icon-only with an accessible
+label and a tooltip on hover or keyboard focus, grouped as:
+
+- **Theme** — switch between light and dark (light is the default; the choice is
+  remembered locally)
+- **Workspace** — reset, load sample, copy Mermaid
+- **Toggles** — ELK layout, hover glow (these light up when active)
+- **Export** — SVG, PNG, PDF, editable Excalidraw
+
+On narrow screens the panes stack and the dock collapses into a horizontal strip.
+
+### Dark mode
+
+Dark mode restyles the app chrome while keeping the diagram on a light "paper"
+canvas, so Mermaid's node colours and edge lines stay readable. The default is
+light; the theme only changes when you choose it and is then remembered between
+visits.
 
 ## Export modes
 
@@ -91,4 +118,5 @@ The app is served under `/tools/mermaid-on-steroids/`; both `npm run dev` and `n
 ## Repo milestones
 
 - `v1.0.0`: first stable baseline pushed as the initial save point
-- `main`: active iteration with Version 2 work
+- `main`: working editable Excalidraw export, hardened against Mermaid version
+  changes, plus the cleaned-up Apple-style interface with light/dark themes
