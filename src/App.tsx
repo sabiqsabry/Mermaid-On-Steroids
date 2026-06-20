@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import mermaid from "mermaid";
 import elkLayouts from "@mermaid-js/layout-elk";
 import { jsPDF } from "jspdf";
+import { buildExcalidrawSkeletons } from "./excalidrawExport";
 
 const SAMPLE_CODE = `flowchart TD
   %% ---------- Enterprise Client ----------
@@ -87,10 +88,16 @@ const SAMPLE_CODE = `flowchart TD
 type ExportFormat =
   | "svg"
   | "png"
-  | "pdf";
+  | "pdf"
+  | "excalidraw-editable-elk";
+
+type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
 
 type PreviewEditorState = {
-  id: string;
+  // Mermaid node id when editing a node, or null for a subgraph (whose DOM id is
+  // not usable in Mermaid 11 — those are matched back to the source by text).
+  id: string | null;
+  matchText: string;
   value: string;
   x: number;
   y: number;
@@ -106,6 +113,15 @@ config:
 ---`;
 
 let mermaidReady: Promise<void> | null = null;
+let excalidrawModuleReady: Promise<ExcalidrawModule> | null = null;
+
+// Loaded on demand so the heavy Excalidraw bundle never blocks first paint.
+async function loadExcalidrawModule() {
+  if (!excalidrawModuleReady) {
+    excalidrawModuleReady = import("@excalidraw/excalidraw");
+  }
+  return excalidrawModuleReady;
+}
 
 async function ensureMermaidReady() {
   if (!mermaidReady) {
@@ -207,46 +223,22 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractMermaidLabelTarget(element: Element | null) {
-  let current: Element | null = element;
-
-  while (current) {
-    const id = current.getAttribute("id");
-    if (id) {
-      if (/^flowchart-([A-Za-z0-9_:.]+)-\d+$/.test(id)) {
-        const match = id.match(/^flowchart-([A-Za-z0-9_:.]+)-\d+$/);
-        if (match?.[1]) {
-          return match[1];
-        }
-      }
-
-      if (/^[A-Za-z][A-Za-z0-9_:.]*$/.test(id)) {
-        return id;
-      }
-    }
-
-    current = current.parentElement;
-  }
-
-  return null;
-}
+// Mermaid 11 prefixes DOM ids with the render id and uses underscores for edges:
+//   nodes:  "mermaid-<uuid>-flowchart-ZT-9"
+//   edges:  "mermaid-<uuid>-L_CA_REST_0_0"
+// so these patterns are matched anywhere in the id rather than anchored.
+const NODE_ID_RE = /flowchart-(.+)-\d+$/;
+const EDGE_ID_RE = /L_([A-Za-z0-9.:]+)_([A-Za-z0-9.:]+)_\d+_\d+$/;
 
 function extractMermaidNodeIdFromElement(element: Element | null) {
   let current: Element | null = element;
 
   while (current) {
     const id = current.getAttribute("id");
-    if (id) {
-      const flowchartNodeMatch = id.match(/^flowchart-([A-Za-z0-9_:.]+)-\d+$/);
-      if (flowchartNodeMatch?.[1]) {
-        return flowchartNodeMatch[1];
-      }
-
-      if (!id.startsWith("L-") && /^[A-Za-z][A-Za-z0-9_:.]*$/.test(id)) {
-        return id;
-      }
+    const match = id?.match(NODE_ID_RE);
+    if (match?.[1]) {
+      return match[1];
     }
-
     current = current.parentElement;
   }
 
@@ -258,15 +250,13 @@ function extractEdgeRelationship(element: Element | null) {
 
   while (current) {
     const id = current.getAttribute("id");
-    if (id) {
-      const edgeMatch = id.match(/^L-([A-Za-z0-9_:.]+)-([A-Za-z0-9_:.]+)-\d+$/);
-      if (edgeMatch?.[1] && edgeMatch?.[2]) {
-        return {
-          edgeId: id,
-          startId: edgeMatch[1],
-          endId: edgeMatch[2],
-        };
-      }
+    const edgeMatch = id?.match(EDGE_ID_RE);
+    if (id && edgeMatch?.[1] && edgeMatch?.[2]) {
+      return {
+        edgeId: id,
+        startId: edgeMatch[1],
+        endId: edgeMatch[2],
+      };
     }
 
     current = current.parentElement;
@@ -278,21 +268,19 @@ function extractEdgeRelationship(element: Element | null) {
 function findConnectedEdgeIds(container: HTMLElement, nodeId: string) {
   const connectedEdges = new Set<string>();
 
-  container.querySelectorAll<HTMLElement>("[id^='L-']").forEach((element) => {
-    const id = element.getAttribute("id");
-    if (!id) {
-      return;
-    }
+  container
+    .querySelectorAll<HTMLElement>("path.flowchart-link")
+    .forEach((element) => {
+      const id = element.getAttribute("id");
+      const edgeMatch = id?.match(EDGE_ID_RE);
+      if (!id || !edgeMatch) {
+        return;
+      }
 
-    const edgeMatch = id.match(/^L-([A-Za-z0-9_:.]+)-([A-Za-z0-9_:.]+)-\d+$/);
-    if (!edgeMatch) {
-      return;
-    }
-
-    if (edgeMatch[1] === nodeId || edgeMatch[2] === nodeId) {
-      connectedEdges.add(id);
-    }
-  });
+      if (edgeMatch[1] === nodeId || edgeMatch[2] === nodeId) {
+        connectedEdges.add(id);
+      }
+    });
 
   return [...connectedEdges];
 }
@@ -309,7 +297,7 @@ function applyHoverContext(container: HTMLElement, context: HoverContext | null)
   clearHoverClasses(container);
 
   const interactiveElements = container.querySelectorAll<HTMLElement>(
-    ".node, .cluster, .edgePath"
+    ".node, .cluster, path.flowchart-link"
   );
 
   if (!context) {
@@ -320,8 +308,13 @@ function applyHoverContext(container: HTMLElement, context: HoverContext | null)
     element.classList.add("mos-dimmed");
   });
 
+  // Node group ids are prefixed (mermaid-<uuid>-flowchart-<id>-<n>), so match by
+  // "contains" rather than "starts with". Edge ids are already full matches.
   const highlightSelectors = [
-    ...context.nodeIds.flatMap((id) => [`[id='${id}']`, `[id^='flowchart-${id}-']`]),
+    ...context.nodeIds.flatMap((id) => [
+      `[id='${id}']`,
+      `[id*='flowchart-${id}-']`,
+    ]),
     ...context.edgeIds.map((id) => `[id='${id}']`),
   ];
 
@@ -381,6 +374,31 @@ function updateMermaidLabelById(source: string, id: string, nextLabel: string) {
   return source;
 }
 
+// Fallback for subgraph labels: the cluster DOM id is not the Mermaid id in
+// Mermaid 11, so locate the source line by its current quoted label text.
+function updateMermaidLabelByText(
+  source: string,
+  matchText: string,
+  nextLabel: string
+) {
+  const quoted = `"${matchText}"`;
+  const lines = source.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!line.includes(quoted)) {
+      continue;
+    }
+    lines[index] = line.replace(
+      quoted,
+      `"${nextLabel.replace(/"/g, '\\"')}"`
+    );
+    return lines.join("\n");
+  }
+
+  return source;
+}
+
 function findMermaidLabelText(element: Element | null) {
   if (!element) {
     return null;
@@ -389,22 +407,6 @@ function findMermaidLabelText(element: Element | null) {
   const textContainer = element.closest("text, .nodeLabel, .cluster-label");
   const text = textContainer?.textContent?.trim() ?? element.textContent?.trim();
   return text || null;
-}
-
-async function renderPreviewToCanvas(container: HTMLDivElement) {
-  const canvas = document.createElement("canvas");
-  canvas.width = container.clientWidth;
-  canvas.height = container.clientHeight;
-  const ctx = canvas.getContext("2d");
-
-  if (!ctx) {
-    throw new Error("Canvas context is not available.");
-  }
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  return canvas;
 }
 
 async function renderSvgMarkupToCanvas(
@@ -548,6 +550,36 @@ export default function App() {
     }
   }, [hoverGlowEnabled]);
 
+  async function exportEditableElkScene() {
+    const liveSvg = previewRef.current?.querySelector("svg");
+    if (!liveSvg) {
+      throw new Error("Render the diagram before exporting to Excalidraw.");
+    }
+
+    const skeletons = buildExcalidrawSkeletons(liveSvg as SVGSVGElement);
+    if (!skeletons.length) {
+      throw new Error(
+        "No editable shapes were found. Excalidraw export currently supports flowchart diagrams."
+      );
+    }
+
+    const { convertToExcalidrawElements, serializeAsJSON } =
+      await loadExcalidrawModule();
+    const elements = convertToExcalidrawElements(skeletons as never, {
+      regenerateIds: false,
+    });
+
+    return serializeAsJSON(
+      elements,
+      {
+        name: `${baseName}-editable-elk`,
+        viewBackgroundColor: "#ffffff",
+      },
+      {},
+      "local"
+    );
+  }
+
   async function handleExport(format: ExportFormat) {
     if (!renderedSvg) {
       setError("Render a diagram first.");
@@ -557,6 +589,20 @@ export default function App() {
 
     try {
       setError(null);
+
+      if (format === "excalidraw-editable-elk") {
+        setStatus("Building editable Excalidraw scene...");
+        const scene = await exportEditableElkScene();
+        downloadBlob(
+          new Blob([scene], { type: "application/json;charset=utf-8" }),
+          `${baseName}.excalidraw`
+        );
+        setStatus(
+          "Exported an editable Excalidraw scene from the ELK-positioned graph."
+        );
+        return;
+      }
+
       const { svgMarkup, width, height } = getPreparedSvgMarkup(renderedSvg);
 
       if (format === "svg") {
@@ -600,7 +646,7 @@ export default function App() {
     setStatus("Copied Mermaid text.");
   }
 
-  function resetToSample() {
+  function resetWorkspace() {
     setCode("");
     setUseElk(true);
     setBaseName("diagram");
@@ -611,6 +657,14 @@ export default function App() {
       previewRef.current.innerHTML = "";
     }
     setStatus("Reset everything. Paste fresh Mermaid code to render.");
+    setError(null);
+  }
+
+  function loadSample() {
+    setCode(SAMPLE_CODE);
+    setUseElk(true);
+    setPreviewEditor(null);
+    setStatus("Loaded the sample diagram.");
     setError(null);
   }
 
@@ -650,11 +704,18 @@ export default function App() {
       return;
     }
 
+    const { id, matchText } = previewEditor;
     setCode((previous) =>
-      updateMermaidLabelById(previous, previewEditor.id, nextValue)
+      id
+        ? updateMermaidLabelById(previous, id, nextValue)
+        : updateMermaidLabelByText(previous, matchText, nextValue)
     );
     setPreviewEditor(null);
-    setStatus(`Updated ${previewEditor.id} in Mermaid code from the preview.`);
+    setStatus(
+      id
+        ? `Updated ${id} in Mermaid code from the preview.`
+        : "Updated the subgraph label in Mermaid code from the preview."
+    );
   }
 
   function handlePreviewClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -663,26 +724,26 @@ export default function App() {
       return;
     }
 
-    const tagName = target.tagName.toLowerCase();
-    const isTextTarget =
-      tagName === "text" ||
-      tagName === "tspan" ||
-      tagName === "span" ||
-      tagName === "div";
-
-    if (!isTextTarget) {
+    // Don't gate on the clicked tag — Mermaid 11 wraps label text in <p>/<span>
+    // inside a <foreignObject>. Instead, resolve a label from the click target
+    // and only open the editor when one is actually found.
+    const text = findMermaidLabelText(target);
+    if (!text || !previewFrameRef.current) {
       return;
     }
 
-    const id = extractMermaidLabelTarget(target);
-    const text = findMermaidLabelText(target);
-    if (!id || !text || !previewFrameRef.current) {
+    // A node resolves to a Mermaid id; a subgraph label does not (its DOM id is
+    // unusable in Mermaid 11), so fall back to matching by its text.
+    const id = extractMermaidNodeIdFromElement(target);
+    const isSubgraph = !id && !!target.closest("g.cluster, .cluster-label");
+    if (!id && !isSubgraph) {
       return;
     }
 
     const frameRect = previewFrameRef.current.getBoundingClientRect();
     setPreviewEditor({
       id,
+      matchText: text,
       value: text,
       x:
         event.clientX -
@@ -756,20 +817,22 @@ export default function App() {
             <span>Enable hover glow beta</span>
           </label>
           <div className="button-row">
-            <button onClick={resetToSample}>Reset</button>
+            <button onClick={resetWorkspace}>Reset</button>
+            <button onClick={loadSample}>Load sample</button>
             <button onClick={copyMermaid}>Copy Mermaid</button>
             <button onClick={() => handleExport("svg")}>SVG</button>
             <button onClick={() => handleExport("png")}>PNG</button>
             <button onClick={() => handleExport("pdf")}>PDF</button>
-            <button disabled title="Coming soon">
+            <button onClick={() => handleExport("excalidraw-editable-elk")}>
               Excalidraw editable ELK
             </button>
           </div>
           <p className="hint">
             Click a node or subgraph label in the preview to edit it inline and
             push the change back into the Mermaid code. `Excalidraw editable
-            ELK` is temporarily paused while we keep working on the editable
-            export path.
+            ELK` exports native, editable Excalidraw shapes and arrows from the
+            ELK-positioned graph — open the file at excalidraw.com to keep
+            editing.
           </p>
         </div>
       </header>

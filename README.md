@@ -21,18 +21,15 @@ This project is an attempt to bridge that gap.
 
 ## What the app does today
 
-Version 1 established the core tool:
+The core tool:
 
 - Mermaid editor with live preview
-- ELK toggle
-- inline preview label editing that writes back to Mermaid code
+- ELK layout toggle
+- a one-click sample diagram to start from
+- inline preview label editing (nodes and subgraphs) that writes back to the Mermaid code
+- interactive preview hover highlighting that focuses a node or edge and its connections
 - high-quality SVG, PNG, and PDF export
-- faithful Excalidraw handoff that preserves the rendered look
-
-Version 2 pushes further:
-
-- interactive preview hover highlighting to make flows feel more alive
-- editable ELK-oriented Excalidraw export as a beta path
+- native, editable Excalidraw export from the ELK-positioned graph
 
 ## Export modes
 
@@ -46,30 +43,19 @@ Exports a higher-resolution raster image based on the rendered SVG, not just the
 
 ### PDF
 
-Exports a single-page PDF using an SVG-to-PDF path for better quality than a basic screenshot export.
-
-### Excalidraw handoff
-
-Preserves the exact Mermaid render by embedding the rendered SVG into an Excalidraw scene.
-
-This is the best choice when visual fidelity matters most.
+Exports a single-page PDF by rasterizing the rendered SVG at high resolution and embedding it, which avoids the font and clipping issues of a direct SVG-to-PDF conversion.
 
 ### Excalidraw editable ELK
 
-Exports native Excalidraw elements using the Mermaid plus ELK-positioned graph as the source.
+Exports native Excalidraw elements — rectangles, diamonds, ellipses, bound arrows, and text — directly from the ELK-positioned graph shown in the preview.
 
-This is the current experimental path toward editable diagrams that still respect the cleaner ELK layout.
+It reads geometry from the exact SVG that was rendered, so the Excalidraw scene keeps the ELK positions and edge routing while remaining fully editable. Open the downloaded `.excalidraw` file at [excalidraw.com](https://excalidraw.com) to keep editing.
+
+Because the export reads the rendered SVG rather than re-parsing Mermaid internals, it stays independent of Mermaid version changes and does not lose the ELK layout.
 
 ## Current limitation
 
-Exact ELK fidelity and full Excalidraw-native editability are still not perfectly the same thing.
-
-Right now, the project supports two different strengths:
-
-- exact look preservation via Excalidraw handoff
-- editable Excalidraw structure via Excalidraw editable ELK
-
-The long-term goal is to get these closer together by carrying more layout and graph metadata across the export boundary.
+Excalidraw does not model every Mermaid shape exactly. Stadium and rounded nodes export as rounded rectangles, and edges that point at a subgraph container bind only at the node end. Node fills, strokes, labels, and ELK routing are preserved.
 
 ## Longer-term direction
 
@@ -88,8 +74,7 @@ The broader approach this repo is exploring:
 - Mermaid
 - `@mermaid-js/layout-elk`
 - jsPDF
-- svg2pdf.js
-- Excalidraw packages
+- `@excalidraw/excalidraw`
 
 ## Repo milestones
 
