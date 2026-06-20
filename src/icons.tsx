@@ -59,10 +59,13 @@ export function IconLayout(props: SVGProps<SVGSVGElement>) {
 }
 
 export function IconGlow(props: SVGProps<SVGSVGElement>) {
+  // Lightbulb — "illuminate the connected flow". Kept distinct from the sun
+  // (light mode) and moon (dark mode) icons.
   return (
     <Icon {...props}>
-      <circle cx="12" cy="12" r="3.5" />
-      <path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8l1.8-1.8M18 6l1.8-1.8" />
+      <path d="M9 18h6" />
+      <path d="M10 21h4" />
+      <path d="M12 2a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.3 1.1 2.2h5c0-.9.5-1.7 1.1-2.2A6 6 0 0 0 12 2z" />
     </Icon>
   );
 }
@@ -102,6 +105,23 @@ export function IconShapes(props: SVGProps<SVGSVGElement>) {
       <rect x="3" y="13" width="8" height="8" rx="1" />
       <circle cx="17" cy="7" r="4" />
       <path d="M11 3.5l3.5 6h-7z" />
+    </Icon>
+  );
+}
+
+export function IconMoon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </Icon>
+  );
+}
+
+export function IconSun(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
     </Icon>
   );
 }

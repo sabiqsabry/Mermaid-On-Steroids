@@ -23,6 +23,8 @@ import {
   IconShapes,
   IconFullscreen,
   IconFullscreenExit,
+  IconMoon,
+  IconSun,
 } from "./icons";
 
 const SAMPLE_CODE = `flowchart TD
@@ -418,6 +420,31 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
   return blob;
 }
 
+// Mermaid's raw parser errors ("Syntax error in text...", "No diagram type
+// detected...") are cryptic for someone who just typed prose. Translate the
+// common ones into a plain-language hint.
+function friendlyRenderError(cause: unknown): string {
+  const raw = cause instanceof Error ? cause.message : String(cause ?? "");
+  if (
+    /syntax error|parse error|no diagram type|expecting|lexical error|unrecognized|invalid/i.test(
+      raw
+    )
+  ) {
+    return "That doesn't look like valid Mermaid yet. Start with a diagram type — for example `flowchart TD` — then add your nodes and arrows. Use Load sample to see a working example.";
+  }
+  return raw || "Failed to render diagram.";
+}
+
+type Theme = "light" | "dark";
+
+// Default to light; only switch when the user explicitly chooses (and remember
+// that choice). The OS preference is intentionally ignored.
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  const saved = window.localStorage.getItem("mos-theme");
+  return saved === "dark" ? "dark" : "light";
+}
+
 type DockButtonProps = {
   label: string;
   onClick: () => void;
@@ -462,6 +489,7 @@ export default function App() {
   const [status, setStatus] = useState("Ready.");
   const [error, setError] = useState<string | null>(null);
   const [renderedSvg, setRenderedSvg] = useState("");
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
   const previewPanelRef = useRef<HTMLElement | null>(null);
@@ -471,6 +499,11 @@ export default function App() {
   const lastHoverKeyRef = useRef<string | null>(null);
 
   const codeWithLayout = useMemo(() => withLayout(code, useElk), [code, useElk]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("mos-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -489,9 +522,9 @@ export default function App() {
 
       setStatus("Rendering...");
       setError(null);
+      const id = `mermaid-${crypto.randomUUID()}`;
       try {
         await ensureMermaidReady();
-        const id = `mermaid-${crypto.randomUUID()}`;
         const { svg } = await mermaid.render(id, codeWithLayout);
         if (cancelled) return;
         setRenderedSvg(svg);
@@ -502,10 +535,11 @@ export default function App() {
         setStatus(useElk ? "Rendered with ELK layout." : "Rendered with default layout.");
       } catch (cause) {
         if (cancelled) return;
-        const message =
-          cause instanceof Error ? cause.message : "Failed to render diagram.";
-        setError(message);
-        setStatus("Render failed.");
+        // Mermaid can leave a temporary error diagram in the DOM on failure.
+        document.getElementById(id)?.remove();
+        document.getElementById(`d${id}`)?.remove();
+        setError(friendlyRenderError(cause));
+        setStatus("Couldn't render — check your Mermaid syntax.");
         setRenderedSvg("");
         if (previewRef.current) previewRef.current.innerHTML = "";
       }
@@ -900,6 +934,19 @@ export default function App() {
         </section>
 
         <aside className="dock" aria-label="Tools">
+          <div className="dock-group">
+            <DockButton
+              label={theme === "dark" ? "Light mode" : "Dark mode"}
+              onClick={() =>
+                setTheme((value) => (value === "dark" ? "light" : "dark"))
+              }
+            >
+              {theme === "dark" ? <IconSun /> : <IconMoon />}
+            </DockButton>
+          </div>
+
+          <div className="dock-divider" />
+
           <div className="dock-group">
             <DockButton label="Reset workspace" onClick={resetWorkspace}>
               <IconReset />
