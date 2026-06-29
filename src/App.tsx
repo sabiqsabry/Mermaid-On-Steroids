@@ -141,26 +141,54 @@ async function loadExcalidrawModule() {
   return excalidrawModuleReady;
 }
 
+const MERMAID_BASE_CONFIG = {
+  startOnLoad: false,
+  securityLevel: "loose" as const,
+  theme: "base" as const,
+  flowchart: {
+    curve: "linear" as const,
+  },
+  themeVariables: {
+    fontFamily: '"Atkinson Hyperlegible", "Inter", "Segoe UI", sans-serif',
+  },
+};
+
 async function ensureMermaidReady() {
   if (!mermaidReady) {
     mermaidReady = (async () => {
       mermaid.registerLayoutLoaders(elkLayouts);
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: "loose",
-        theme: "base",
-        flowchart: {
-          curve: "linear",
-        },
-        themeVariables: {
-          fontFamily:
-            '"Atkinson Hyperlegible", "Inter", "Segoe UI", sans-serif',
-        },
-      });
+      mermaid.initialize(MERMAID_BASE_CONFIG);
     })();
   }
 
   await mermaidReady;
+}
+
+// Mermaid draws on-screen labels as HTML wrapped in <foreignObject>, which is
+// great for the live preview but breaks exports in two ways:
+//   - the SVG renders blank in non-browser viewers (Preview, Illustrator, ...)
+//   - rasterizing it onto a <canvas> taints the canvas, so toBlob/toDataURL
+//     throw "Tainted canvases may not be exported" — killing PNG and PDF.
+// Re-rendering the same diagram with htmlLabels disabled yields native SVG
+// <text> labels, so the exported SVG is portable and the PNG/PDF canvas stays
+// clean. The global config is restored afterwards so the preview keeps its
+// nicer HTML labels.
+async function renderExportSvg(code: string) {
+  await ensureMermaidReady();
+  // Mermaid resolves labels as `config.htmlLabels ?? flowchart.htmlLabels`, and
+  // several internal paths read only the top-level flag — so disable both.
+  mermaid.initialize({
+    ...MERMAID_BASE_CONFIG,
+    htmlLabels: false,
+    flowchart: { ...MERMAID_BASE_CONFIG.flowchart, htmlLabels: false },
+  });
+  try {
+    const id = `mermaid-export-${crypto.randomUUID()}`;
+    const { svg } = await mermaid.render(id, code);
+    return svg;
+  } finally {
+    mermaid.initialize(MERMAID_BASE_CONFIG);
+  }
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -636,7 +664,10 @@ export default function App() {
         return;
       }
 
-      const { svgMarkup, width, height } = getPreparedSvgMarkup(renderedSvg);
+      // Render a foreignObject-free copy so the exported file is portable and
+      // the PNG/PDF canvas doesn't get tainted by HTML labels.
+      const exportSvg = await renderExportSvg(codeWithLayout);
+      const { svgMarkup, width, height } = getPreparedSvgMarkup(exportSvg);
 
       if (format === "svg") {
         downloadBlob(svgToBlob(svgMarkup), `${baseName}.svg`);
@@ -657,10 +688,13 @@ export default function App() {
           orientation: width >= height ? "landscape" : "portrait",
           unit: "pt",
           format: [width, height],
+          compress: true,
         });
         const canvas = await renderSvgMarkupToCanvas(svgMarkup, width, height);
         const pngDataUrl = canvas.toDataURL("image/png");
-        pdf.addImage(pngDataUrl, "PNG", 0, 0, width, height);
+        // Deflate the embedded raster — without compression jsPDF stores the
+        // high-resolution bitmap almost raw, producing 100 MB+ files.
+        pdf.addImage(pngDataUrl, "PNG", 0, 0, width, height, undefined, "FAST");
         const pdfBlob = pdf.output("blob");
         downloadBlob(pdfBlob, `${baseName}.pdf`);
         setStatus("Exported a high-quality single-page PDF download.");
