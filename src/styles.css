@@ -264,40 +264,61 @@ textarea::placeholder {
 /* ---------- Preview ---------- */
 .preview-frame {
   flex: 1;
-  padding: 18px;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
   background-color: var(--canvas);
   background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
   background-size: 22px 22px;
+  cursor: grab;
+  /* Let pointer panning own the gesture instead of the browser's scroll/zoom. */
+  touch-action: none;
+  user-select: none;
+}
+
+.preview-frame.is-panning,
+.preview-frame.is-panning * {
+  cursor: grabbing !important;
 }
 
 .preview-stage {
-  transform-origin: top left;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
   width: max-content;
-  min-width: 100%;
-  transition: transform 0.18s ease;
+  will-change: transform;
 }
 
 .preview-canvas {
-  min-height: 540px;
+  width: max-content;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-md);
   padding: 18px;
 }
 
 .preview-empty-state {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  min-height: 420px;
   color: var(--text-tertiary);
   font-size: 0.95rem;
+  pointer-events: none;
 }
 
 .preview-canvas svg {
-  max-width: 100%;
+  display: block;
   height: auto;
+}
+
+/* Fill the screen cleanly in fullscreen instead of keeping the panel's fixed
+   height, so the fit-to-view zoom has the whole viewport to work with. */
+.preview-panel:fullscreen,
+.preview-panel:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
 }
 
 .preview-canvas .node,

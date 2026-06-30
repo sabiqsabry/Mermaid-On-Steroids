@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mermaid from "mermaid";
 import elkLayouts from "@mermaid-js/layout-elk";
 import { jsPDF } from "jspdf";
@@ -473,6 +473,17 @@ function getInitialTheme(): Theme {
   return saved === "dark" ? "dark" : "light";
 }
 
+// Pan/zoom viewport limits. The lower bound is small so very large diagrams can
+// shrink to fit; the upper bound keeps zoom-in sensible.
+const MIN_SCALE = 0.05;
+const MAX_SCALE = 4;
+
+type PreviewView = { scale: number; tx: number; ty: number };
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 type DockButtonProps = {
   label: string;
   onClick: () => void;
@@ -509,7 +520,11 @@ export default function App() {
   const [useElk, setUseElk] = useState(true);
   const [hoverGlowEnabled, setHoverGlowEnabled] = useState(false);
   const [baseName, setBaseName] = useState("diagram");
-  const [previewZoom, setPreviewZoom] = useState(1);
+  const [view, setViewState] = useState<PreviewView>({ scale: 1, tx: 0, ty: 0 });
+  // Animate transform changes for button/fit zooms, but follow drag and wheel
+  // input instantly so panning never lags behind the cursor.
+  const [animateView, setAnimateView] = useState(true);
+  const [isPanning, setIsPanning] = useState(false);
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [previewEditor, setPreviewEditor] = useState<PreviewEditorState | null>(
     null
@@ -525,8 +540,94 @@ export default function App() {
   // Avoids recomputing the hover highlight on every mouse move while the cursor
   // stays within the same node or edge.
   const lastHoverKeyRef = useRef<string | null>(null);
+  // Live mirror of `view` so pointer/wheel handlers read the latest transform
+  // without stale closures, plus the in-flight drag gesture state.
+  const viewRef = useRef(view);
+  const panStateRef = useRef<{
+    startX: number;
+    startY: number;
+    startTx: number;
+    startTy: number;
+    moved: boolean;
+    target: EventTarget | null;
+  } | null>(null);
+  const draggingRef = useRef(false);
+  // Fit the next freshly rendered diagram to the viewport (set on first render,
+  // load sample, and reset); cleared so edits keep the user's current zoom/pan.
+  const pendingFitRef = useRef(true);
 
   const codeWithLayout = useMemo(() => withLayout(code, useElk), [code, useElk]);
+
+  // Writes a new transform, clamping the pan so the diagram can't drift off the
+  // sides: smaller-than-viewport content stays fully inside, larger content
+  // always keeps the viewport covered.
+  const applyView = useCallback((next: PreviewView, animate = false) => {
+    const scale = clampNumber(next.scale, MIN_SCALE, MAX_SCALE);
+    const frame = previewFrameRef.current;
+    const canvas = previewRef.current;
+    let { tx, ty } = next;
+    if (frame && canvas) {
+      const contentW = canvas.offsetWidth * scale;
+      const contentH = canvas.offsetHeight * scale;
+      const fw = frame.clientWidth;
+      const fh = frame.clientHeight;
+      // On an axis where the whole diagram fits, keep it centred so it never
+      // drifts off to one side; otherwise allow free panning but never expose a
+      // gap past the edges.
+      tx =
+        contentW <= fw
+          ? (fw - contentW) / 2
+          : clampNumber(tx, fw - contentW, 0);
+      ty =
+        contentH <= fh
+          ? (fh - contentH) / 2
+          : clampNumber(ty, fh - contentH, 0);
+    }
+    const resolved = { scale, tx, ty };
+    viewRef.current = resolved;
+    setAnimateView(animate);
+    setViewState(resolved);
+  }, []);
+
+  // Centres the whole diagram in the viewport, scaled down to fit with a small
+  // margin but never enlarged past its natural size.
+  const fitView = useCallback(
+    (animate = true) => {
+      const frame = previewFrameRef.current;
+      const canvas = previewRef.current;
+      if (!frame || !canvas) return;
+      const cw = canvas.offsetWidth;
+      const ch = canvas.offsetHeight;
+      if (!cw || !ch) return;
+      const fw = frame.clientWidth;
+      const fh = frame.clientHeight;
+      const scale = clampNumber(
+        Math.min((fw / cw) * 0.94, (fh / ch) * 0.94, 1),
+        MIN_SCALE,
+        MAX_SCALE
+      );
+      applyView(
+        { scale, tx: (fw - cw * scale) / 2, ty: (fh - ch * scale) / 2 },
+        animate
+      );
+    },
+    [applyView]
+  );
+
+  // Zooms by `factor` while keeping the point at (cx, cy) — in viewport
+  // coordinates — pinned under the cursor, so nothing jumps.
+  const zoomAround = useCallback(
+    (factor: number, cx: number, cy: number, animate: boolean) => {
+      const v = viewRef.current;
+      const scale = clampNumber(v.scale * factor, MIN_SCALE, MAX_SCALE);
+      const k = scale / v.scale;
+      applyView(
+        { scale, tx: cx - (cx - v.tx) * k, ty: cy - (cy - v.ty) * k },
+        animate
+      );
+    },
+    [applyView]
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -544,6 +645,8 @@ export default function App() {
         if (previewRef.current) {
           previewRef.current.innerHTML = "";
         }
+        // Next diagram to appear should fit the viewport fresh.
+        pendingFitRef.current = true;
         setStatus("Paste Mermaid code to render your diagram.");
         return;
       }
@@ -559,6 +662,22 @@ export default function App() {
         setPreviewEditor(null);
         if (previewRef.current) {
           previewRef.current.innerHTML = svg;
+          // Mermaid renders the SVG with width="100%", which collapses inside
+          // the max-content stage. Pin it to its natural pixel size so the
+          // pan/zoom transform has real dimensions to work with.
+          const svgEl = previewRef.current.querySelector("svg");
+          const viewBox = svgEl?.viewBox?.baseVal;
+          if (svgEl && viewBox && viewBox.width && viewBox.height) {
+            svgEl.setAttribute("width", String(viewBox.width));
+            svgEl.setAttribute("height", String(viewBox.height));
+            svgEl.style.maxWidth = "none";
+          }
+        }
+        // Fit a brand-new diagram to the viewport once; preserve the user's
+        // zoom/pan across subsequent edits.
+        if (pendingFitRef.current) {
+          pendingFitRef.current = false;
+          requestAnimationFrame(() => fitView(true));
         }
         setStatus(useElk ? "Rendered with ELK layout." : "Rendered with default layout.");
       } catch (cause) {
@@ -589,6 +708,37 @@ export default function App() {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
     };
   }, []);
+
+  // Wheel (and trackpad pinch) zooms toward the cursor. Registered natively so
+  // it can be non-passive and stop the page from scrolling.
+  useEffect(() => {
+    const frame = previewFrameRef.current;
+    if (!frame) return;
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = frame.getBoundingClientRect();
+      const factor = Math.exp(-event.deltaY * 0.0015);
+      zoomAround(
+        factor,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        false
+      );
+    };
+
+    frame.addEventListener("wheel", onWheel, { passive: false });
+    return () => frame.removeEventListener("wheel", onWheel);
+  }, [zoomAround]);
+
+  // Re-fit the diagram whenever the viewport size changes shape — entering or
+  // leaving fullscreen — once the new layout has settled.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() => fitView(true))
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [isPreviewFullscreen, fitView]);
 
   useEffect(() => {
     if (previewEditor && previewInputRef.current) {
@@ -717,9 +867,10 @@ export default function App() {
     setCode("");
     setUseElk(true);
     setBaseName("diagram");
-    setPreviewZoom(1);
     setPreviewEditor(null);
     setRenderedSvg("");
+    pendingFitRef.current = true;
+    applyView({ scale: 1, tx: 0, ty: 0 }, false);
     if (previewRef.current) {
       previewRef.current.innerHTML = "";
     }
@@ -731,20 +882,33 @@ export default function App() {
     setCode(SAMPLE_CODE);
     setUseElk(true);
     setPreviewEditor(null);
+    pendingFitRef.current = true;
     setStatus("Loaded the sample diagram.");
     setError(null);
   }
 
+  function zoomByButton(factor: number) {
+    const frame = previewFrameRef.current;
+    if (!frame) return;
+    zoomAround(factor, frame.clientWidth / 2, frame.clientHeight / 2, true);
+  }
+
   function zoomIn() {
-    setPreviewZoom((value) => Math.min(3, Number((value + 0.2).toFixed(2))));
+    zoomByButton(1.25);
   }
 
   function zoomOut() {
-    setPreviewZoom((value) => Math.max(0.4, Number((value - 0.2).toFixed(2))));
+    zoomByButton(0.8);
   }
 
   function resetZoom() {
-    setPreviewZoom(1);
+    fitView(true);
+  }
+
+  // Switching layout engine re-lays out the whole graph, so refit it.
+  function toggleElk() {
+    pendingFitRef.current = true;
+    setUseElk((value) => !value);
   }
 
   async function togglePreviewFullscreen() {
@@ -785,8 +949,14 @@ export default function App() {
     );
   }
 
-  function handlePreviewClick(event: React.MouseEvent<HTMLDivElement>) {
-    const target = event.target as HTMLElement | null;
+  // Opens the inline label editor for a click that resolved to a node or
+  // subgraph label. Runs on pointer-up only when the gesture wasn't a pan.
+  function openEditorAt(
+    rawTarget: EventTarget | null,
+    clientX: number,
+    clientY: number
+  ) {
+    const target = rawTarget as HTMLElement | null;
     if (!target) {
       return;
     }
@@ -812,20 +982,76 @@ export default function App() {
       id,
       matchText: text,
       value: text,
-      x:
-        event.clientX -
-        frameRect.left +
-        previewFrameRef.current.scrollLeft +
-        12,
-      y:
-        event.clientY -
-        frameRect.top +
-        previewFrameRef.current.scrollTop +
-        12,
+      x: clientX - frameRect.left + 12,
+      y: clientY - frameRect.top + 12,
     });
   }
 
+  // Click-and-drag panning. We capture the pointer on the frame and only treat
+  // movement past a small threshold as a pan, so a plain click still edits a
+  // label.
+  function handleFramePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    // Leave the inline editor's own pointer handling alone.
+    if (target?.closest(".preview-editor")) return;
+    const frame = previewFrameRef.current;
+    if (!frame) return;
+
+    panStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startTx: viewRef.current.tx,
+      startTy: viewRef.current.ty,
+      moved: false,
+      target: event.target,
+    };
+    frame.setPointerCapture(event.pointerId);
+  }
+
+  function handleFramePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const pan = panStateRef.current;
+    if (!pan) return;
+
+    const dx = event.clientX - pan.startX;
+    const dy = event.clientY - pan.startY;
+    if (!pan.moved) {
+      if (Math.hypot(dx, dy) < 4) return;
+      pan.moved = true;
+      draggingRef.current = true;
+      setIsPanning(true);
+      if (previewRef.current) clearHoverClasses(previewRef.current);
+    }
+
+    applyView(
+      {
+        scale: viewRef.current.scale,
+        tx: pan.startTx + dx,
+        ty: pan.startTy + dy,
+      },
+      false
+    );
+  }
+
+  function handleFramePointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const pan = panStateRef.current;
+    const frame = previewFrameRef.current;
+    if (frame?.hasPointerCapture(event.pointerId)) {
+      frame.releasePointerCapture(event.pointerId);
+    }
+    panStateRef.current = null;
+    draggingRef.current = false;
+    setIsPanning(false);
+
+    if (pan && !pan.moved) {
+      openEditorAt(pan.target, event.clientX, event.clientY);
+    }
+  }
+
   function handlePreviewHover(event: React.MouseEvent<HTMLDivElement>) {
+    if (draggingRef.current) {
+      return;
+    }
     if (!hoverGlowEnabled || !previewRef.current) {
       return;
     }
@@ -895,8 +1121,8 @@ export default function App() {
                 <button onClick={zoomOut} aria-label="Zoom out">
                   −
                 </button>
-                <button onClick={resetZoom} aria-label="Reset zoom">
-                  {Math.round(previewZoom * 100)}%
+                <button onClick={resetZoom} aria-label="Fit to view">
+                  {Math.round(view.scale * 100)}%
                 </button>
                 <button onClick={zoomIn} aria-label="Zoom in">
                   +
@@ -917,25 +1143,34 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="preview-frame" ref={previewFrameRef}>
+          <div
+            className={`preview-frame${isPanning ? " is-panning" : ""}`}
+            ref={previewFrameRef}
+            onPointerDown={handleFramePointerDown}
+            onPointerMove={handleFramePointerMove}
+            onPointerUp={handleFramePointerUp}
+            onPointerCancel={handleFramePointerUp}
+          >
             <div
               className="preview-stage"
-              style={{ transform: `scale(${previewZoom})` }}
+              style={{
+                transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
+                transition: animateView ? "transform 0.18s ease" : "none",
+              }}
               data-hover-glow={hoverGlowEnabled ? "enabled" : "disabled"}
             >
               <div
                 ref={previewRef}
                 className="preview-canvas"
-                onClick={handlePreviewClick}
                 onMouseMove={handlePreviewHover}
                 onMouseLeave={handlePreviewLeave}
               />
-              {!renderedSvg ? (
-                <div className="preview-empty-state">
-                  Your rendered diagram will appear here.
-                </div>
-              ) : null}
             </div>
+            {!renderedSvg ? (
+              <div className="preview-empty-state">
+                Your rendered diagram will appear here.
+              </div>
+            ) : null}
             {previewEditor ? (
               <form
                 className="preview-editor"
@@ -999,7 +1234,7 @@ export default function App() {
             <DockButton
               label={`ELK layout: ${useElk ? "on" : "off"}`}
               active={useElk}
-              onClick={() => setUseElk((value) => !value)}
+              onClick={toggleElk}
             >
               <IconLayout />
             </DockButton>
